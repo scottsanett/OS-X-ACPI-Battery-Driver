@@ -92,8 +92,8 @@ enum
 
 static uint32_t milliSecPollingTable[2] =
 { 
-	60000,    // 0 == Regular 30 second polling
-	60000      // 1 == Quick 1 second polling
+	30000,    // 0 == Regular 30 second polling
+	1000      // 1 == Quick 1 second polling
 };
 
 // Keys we use to publish battery state in our IOPMPowerSource::properties array
@@ -298,8 +298,11 @@ bool AppleSmartBattery::loadConfiguration()
     if (PE_parse_boot_argn("abm_firstpolldelay", &pollDelay, sizeof pollDelay))
         fFirstPollDelay = pollDelay;
 
+	fPollCount = 0;
+	fBatteryPollCount = 0;
+	
     // Configuration done, release allocated merged configuration
-    OSSafeRelease(merged);
+    OSSafeReleaseNULL(merged);
 
     return true;
 }
@@ -426,8 +429,7 @@ void AppleSmartBattery::logReadError(
  *
  ******************************************************************************/
 
-void AppleSmartBattery::setPollingInterval(
-												int milliSeconds)
+void AppleSmartBattery::setPollingInterval(int milliSeconds)
 {
     DebugLog("setPollingInterval: New interval = %d ms\n", milliSeconds);
     
@@ -446,7 +448,7 @@ void AppleSmartBattery::setPollingInterval(
 bool AppleSmartBattery::pollBatteryState(int path)
 {
     DebugLog("pollBatteryState: path = %d\n", path);
-
+	
     // Ignore calls to pollBatteryState before first timer has expired
     if (!fFirstTimer)
     {
@@ -459,12 +461,14 @@ bool AppleSmartBattery::pollBatteryState(int path)
     fProvider->getBatterySTA();
     if (fBatteryPresent)
     {
-        if (fUseBatteryExtendedInformation)
-            fProvider->getBatteryBIX();
-        else
-            fProvider->getBatteryBIF();
-        if (fUseBatteryExtraInformation)
-            fProvider->getBatteryBBIX();
+		if (fStartupFastPoll || path == kNewBatteryPath) {
+        	if (fUseBatteryExtendedInformation)
+            	fProvider->getBatteryBIX();
+        	else
+            	fProvider->getBatteryBIF();
+        	if (fUseBatteryExtraInformation)
+            	fProvider->getBatteryBBIX();
+		}
         fProvider->getBatteryBST();
     }
     else
@@ -491,6 +495,7 @@ bool AppleSmartBattery::pollBatteryState(int path)
 
         DebugLog("fRealAC=%d, fACConnected=%d\n", fRealAC, fACConnected);
         if (-1 == fRealAC || fRealAC == fACConnected)
+		// if (true)
         {
             // Restart timer with standard polling interval
             fPollTimer->setTimeoutMS(milliSecPollingTable[fPollingInterval]);
@@ -737,8 +742,8 @@ void AppleSmartBattery::rebuildLegacyIOBatteryInfo(bool do_update)
         OSNumber* flags_num = OSNumber::withNumber((unsigned long long)flags, NUM_BITS);
         if (!legacyDict || !flags_num)
         {
-            OSSafeRelease(legacyDict);
-            OSSafeRelease(flags_num);
+            OSSafeReleaseNULL(legacyDict);
+            OSSafeReleaseNULL(flags_num);
             return;
         }
 
@@ -1415,10 +1420,10 @@ IOReturn AppleSmartBattery::setBatteryBIX(OSArray *acpibat_bix)
     setFirmwareSerialNumber(serialNumber);
     setBatterySerialNumber(deviceName, OSDynamicCast(OSSymbol, getProperty(kIOPMPSSerialKey)));
 
-    OSSafeRelease(deviceName);
-    OSSafeRelease(type);
-    OSSafeRelease(manufacturer);
-    OSSafeRelease(serialNumber);
+    OSSafeReleaseNULL(deviceName);
+    OSSafeReleaseNULL(type);
+    OSSafeReleaseNULL(manufacturer);
+    OSSafeReleaseNULL(serialNumber);
 
 	setCycleCount(fCycleCount);
 
@@ -1840,7 +1845,7 @@ IOReturn AppleSmartBattery::setBatteryBST(OSArray *acpibat_bst)
         //    situation 2: battery might be getting hot, so the charger may stop charging it
         //    situation 3: the battery might be broken, so the charger stops charging it
         //    situation 4: broken DSDT code causing bad data to be returned
-        
+
 #if 0
 		fCurrentCapacity = fMaxCapacity;
 		setCurrentCapacity(fCurrentCapacity);
@@ -1856,6 +1861,8 @@ IOReturn AppleSmartBattery::setBatteryBST(OSArray *acpibat_bst)
 		 *     discharging && below 5% && on AC power
 		 * i.e. we're doing an Inflow Disabled discharge
 		 */
+		setProperty("Quick Poll", false);
+		fPollingInterval = kDefaultPollInterval;
 		if ((((100*fCurrentCapacity) / fMaxCapacity) < 5) && fACConnected) {
 			setProperty("Quick Poll", true);
 			fPollingInterval = kQuickPollInterval;
@@ -1871,7 +1878,7 @@ IOReturn AppleSmartBattery::setBatteryBST(OSArray *acpibat_bst)
 	
 	// Assumes 4 cells but Smart Battery standard does not provide count to do this dynamically. 
 	// Smart Battery can expose manufacturer specific functions, but they will be specific to the embedded battery controller
-    UInt32 cellVoltage = fCurrentVoltage / 4;
+	UInt32 cellVoltage = fCurrentVoltage / 6;
     for (int i = 0; i < NUM_CELLS-1; i++)
     {
         OSNumber* num = (OSNumber*)fCellVoltages->getObject(i);

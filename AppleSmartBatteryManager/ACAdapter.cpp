@@ -67,12 +67,12 @@ IOReturn ACPIACAdapter::setPowerState(unsigned long state, IOService* device)
 IOReturn ACPIACAdapter::message(UInt32 type, IOService* provider, void* argument)
 {
     DebugLog("ACPIACAdapter::message: type: %08X provider: %s\n", (unsigned int)type, provider->getName());
-    
+
     if (type == kIOACPIMessageDeviceNotification && fProvider)
     {
         UInt32 acpi = 0;
-		fProvider->evaluateInteger("_PSR", &acpi);
-        if (kIOReturnSuccess == fProvider->evaluateInteger("_PSR", &acpi))
+		IOReturn evaluateStatus = fProvider->evaluateInteger("_PSR", &acpi);
+		if (kIOReturnSuccess == evaluateStatus)
         {
             DebugLog("ACPIACAdapter::message setting AC %s\n", (acpi ? "connected" : "disconnected"));
             
@@ -83,8 +83,9 @@ IOReturn ACPIACAdapter::message(UInt32 type, IOService* provider, void* argument
                 DebugLog("ACPIACAdapter::message could not notify OS about AC status\n");
             
             // notify battery managers of change in AC state
-            if (NULL != fTracker)
+            if (NULL != fTracker) {
                 fTracker->notifyBatteryManagers(acpi);
+			}
         }
         else
         {

@@ -304,7 +304,7 @@ IOReturn AppleSmartBatteryManager::message(UInt32 type, IOService *provider, voi
 		else 
 		{
             // Just an alarm; re-read battery state.
-			DebugLog("polling battery state\n");
+			// DebugLog("polling battery state\n");
             fBatteryGate->runAction(OSMemberFunctionCast(IOCommandGate::Action, fBattery, &AppleSmartBattery::pollBatteryState), (void*)kExistingBatteryPath);
 		}
 	}
@@ -373,7 +373,7 @@ IOReturn AppleSmartBatteryManager::getBatteryBIF(void)
             setProperty("Battery Information", acpibat_bif);
             value = fBattery->setBatteryBIF(acpibat_bif);
         }
-        OSSafeRelease(fBatteryBIF);
+        OSSafeReleaseNULL(fBatteryBIF);
 		return value;
 	} 
     else 
@@ -402,7 +402,7 @@ IOReturn AppleSmartBatteryManager::getBatteryBIX(void)
             setProperty("Battery Extended Information", acpibat_bix);
             value = fBattery->setBatteryBIX(acpibat_bix);
         }
-		OSSafeRelease(fBatteryBIX);
+		OSSafeReleaseNULL(fBatteryBIX);
 		return value;
 	}
     else 
@@ -431,7 +431,7 @@ IOReturn AppleSmartBatteryManager::getBatteryBBIX(void)
             setProperty("Battery Extra Information", acpibat_bbix);
             value = fBattery->setBatteryBBIX(acpibat_bbix);
         }
-		OSSafeRelease(fBatteryBBIX);
+		OSSafeReleaseNULL(fBatteryBBIX);
 		return value;
 	} 
     else 
@@ -460,7 +460,7 @@ IOReturn AppleSmartBatteryManager::getBatteryBST(void)
             setProperty("Battery Status", acpibat_bst);
             value = fBattery->setBatteryBST(acpibat_bst);
         }
-		OSSafeRelease(fBatteryBST);
+		OSSafeReleaseNULL(fBatteryBST);
 		return value;
 	}
 	else
@@ -574,7 +574,7 @@ OSObject* AppleSmartBatteryManager::translateArray(OSArray* array)
             if (trans)
                 obj = trans;
             dict->setObject(key, obj);
-            OSSafeRelease(trans);
+            OSSafeReleaseNULL(trans);
         }
         result = dict;
     }
@@ -587,7 +587,8 @@ OSDictionary* AppleSmartBatteryManager::getConfigurationOverride(const char* met
 {
     // attempt to get configuration data from provider
     OSObject* r = NULL;
-    if (kIOReturnSuccess != (fProvider->evaluateObject(method, &r)))
+	IOReturn evaluateStatus = fProvider->evaluateObject(method, &r);
+    if (kIOReturnSuccess != evaluateStatus)
         return NULL;
 
     // for translation method must return array
@@ -595,13 +596,13 @@ OSDictionary* AppleSmartBatteryManager::getConfigurationOverride(const char* met
     OSArray* array = OSDynamicCast(OSArray, r);
     if (array)
         obj = translateArray(array);
-    OSSafeRelease(r);
+    OSSafeReleaseNULL(r);
 
     // must be dictionary after translation, even though array is possible
     OSDictionary* result = OSDynamicCast(OSDictionary, obj);
     if (!result)
     {
-        OSSafeRelease(obj);
+        OSSafeReleaseNULL(obj);
         return NULL;
     }
     return result;
